@@ -1,15 +1,30 @@
 import os
-
-import aiohttp
 import discord
 import requests
 import json
-import nltk
 import pandas as pd
+import numpy as np
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
 
 TOKEN = os.environ['CLIENT_TOKEN']
 client = discord.Client()
+
+# Instantiate Logistic Regression classifier for sentiment analysis
+log_reg_classifier = LogisticRegression()
+df = pd.read_csv('sentences_sentiment_labelled.txt', names=['sentence', 'label'], sep='\t')
+# Assign x variable to include independent predictor attributes
+x = df['sentence'].values
+# Assign label values to y variable
+y = df['label'].values
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
+vectorizer = CountVectorizer()
+vectorizer.fit(x_train)
+x_train = vectorizer.transform(x_train)
+x_test = vectorizer.transform(x_test)
+log_reg_classifier.fit(x_train, y_train)
 
 keyword_dict = {"xun yu classes": "meng 420 & meng 270", "xun yu office hours": "10:00-12:00pm(mon,tues, wed & thurs)",
                 "qin liu classes": "meng 201, meng 211, meng 438/602",
@@ -72,7 +87,29 @@ keyword_dict = {"xun yu classes": "meng 420 & meng 270", "xun yu office hours": 
                 "susan gass classes": "csci 235 m01/m02, csci 235 m03/m04, csci 330/509 m01/m02, csci 330/509 m03/m04, csci/itec 620/445",
                 "hi": "Hey there!", "hey": "Hey there!", "hello": "Hey there!"}
 
-def get_quote():
+
+roary_positive_responses = [
+    "Oh, this is very kind of you.",
+    "Thanks!",
+    "Thank you very much!",
+    "Actually I think you are the best.",
+    "Have an awesome day :)",
+    "Looks like we will make good friends.",
+    "Ohh that's so sweet.",
+    "Nice approach well done mate."
+]
+
+roary_negative_responses = [
+    "Don't be an asshole",
+    "Now this is rude",
+    "You can't go anywhere with that attitude",
+    "You sounding like samiha right now cut it out",
+    "Tough day, huh?",
+    "I thought we were friends"
+]
+
+
+def get_inspirational_quote():
     response = requests.get("https://zenquotes.io/api/random")
     json_data = json.loads(response.text)
     quote = json_data[0]['q'] + " -" + json_data[0]['a']
@@ -91,19 +128,31 @@ async def on_message(message):
     if message.author == client.user:
         return
     message_text = message.content.lower()
-    message_vectorizer = TfidfVectorizer()
-    message_vector = message_vectorizer.fit_transform([message_text])
-    word_names = message_vectorizer.get_feature_names_out()
-    dense = message_vector.todense()
-    dense_list = dense.tolist()
-    word_df = pd.DataFrame(dense_list, columns=word_names)
-    print(word_df)
-
     if message_text in keyword_dict.keys():
         await message.channel.send(keyword_dict[message_text])
 
-    elif message_text.startswith('inspire'):
-        quote = get_quote()
+    elif message_text == 'inspire':
+        quote = get_inspirational_quote()
         await message.channel.send(quote)
+
+    else:
+        message_vectorizer = TfidfVectorizer()
+        message_vector = message_vectorizer.fit_transform([message_text])
+        word_names = message_vectorizer.get_feature_names_out()
+        dense = message_vector.todense()
+        dense_list = dense.tolist()
+        word_df = pd.DataFrame(dense_list, columns=word_names)
+        print(word_df)
+        message_text_to_array = [message_text]
+        x_new_sample = vectorizer.transform(message_text_to_array)
+        result = log_reg_classifier.predict(x_new_sample)[0]
+
+        if result == 0:
+            response = np.random.choice(roary_negative_responses, 1)[0]
+            await message.channel.send(response)
+
+        elif result == 1:
+            response = np.random.choice(roary_positive_responses, 1)[0]
+            await message.channel.send(response)
 
 client.run(TOKEN)
