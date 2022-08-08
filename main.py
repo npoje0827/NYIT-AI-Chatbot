@@ -8,6 +8,8 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
+from chatterbot import ChatBot
+from chatterbot.trainers import ChatterBotCorpusTrainer
 
 TOKEN = os.environ['CLIENT_TOKEN']
 client = discord.Client()
@@ -25,6 +27,10 @@ vectorizer.fit(x_train)
 x_train = vectorizer.transform(x_train)
 x_test = vectorizer.transform(x_test)
 log_reg_classifier.fit(x_train, y_train)
+
+roary_chatbot = ChatBot('Roary')
+trainer = ChatterBotCorpusTrainer(roary_chatbot)
+trainer.train("chatterbot.corpus.english")
 
 keyword_dict = {"xun yu classes": "meng 420 & meng 270", "xun yu office hours": "10:00-12:00pm(mon,tues, wed & thurs)",
                 "qin liu classes": "meng 201, meng 211, meng 438/602",
@@ -84,29 +90,7 @@ keyword_dict = {"xun yu classes": "meng 420 & meng 270", "xun yu office hours": 
                 "richard meyers classes": "ctec 204, ctec 208, ctec 243, ctec 247, etec 325",
                 "richard meyers office hours": "11:10am-12:10pm(mon & wed) & 9:30-10:30am(tues & thurs) & 2:00-4:00pm(fri)",
                 "jerry cheng classes": "dtsc 615 & dtsc 630", "jerry cheng office hours": "3:30-5:30pm(mon & thurs)",
-                "susan gass classes": "csci 235 m01/m02, csci 235 m03/m04, csci 330/509 m01/m02, csci 330/509 m03/m04, csci/itec 620/445",
-                "hi": "Hey there!", "hey": "Hey there!", "hello": "Hey there!"}
-
-
-roary_positive_responses = [
-    "Oh, this is very kind of you.",
-    "Thanks!",
-    "Thank you very much!",
-    "Actually I think you are the best.",
-    "Have an awesome day :)",
-    "Looks like we will make good friends.",
-    "Ohh that's so sweet.",
-    "Nice approach well done mate."
-]
-
-roary_negative_responses = [
-    "Don't be an asshole",
-    "Now this is rude",
-    "You can't go anywhere with that attitude",
-    "You sounding like samiha right now cut it out",
-    "Tough day, huh?",
-    "I thought we were friends"
-]
+                "susan gass classes": "csci 235 m01/m02, csci 235 m03/m04, csci 330/509 m01/m02, csci 330/509 m03/m04, csci/itec 620/445"}
 
 
 def get_inspirational_quote():
@@ -143,16 +127,14 @@ async def on_message(message):
         dense_list = dense.tolist()
         word_df = pd.DataFrame(dense_list, columns=word_names)
         print(word_df)
+
+        response = roary_chatbot.get_response(message_text)
+        await message.channel.send(response)
+
         message_text_to_array = [message_text]
         x_new_sample = vectorizer.transform(message_text_to_array)
         result = log_reg_classifier.predict(x_new_sample)[0]
-
-        if result == 0:
-            response = np.random.choice(roary_negative_responses, 1)[0]
-            await message.channel.send(response)
-
-        elif result == 1:
-            response = np.random.choice(roary_positive_responses, 1)[0]
-            await message.channel.send(response)
+        sentiment_detected = "positive" if result == 1 else "negative"
+        print("Sentiment detected: ", sentiment_detected)
 
 client.run(TOKEN)
