@@ -10,7 +10,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from chatterbot import ChatBot
 from chatterbot.trainers import ChatterBotCorpusTrainer
-
+from chatterbot.trainers import ListTrainer
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 TOKEN = os.environ['CLIENT_TOKEN']
 client = discord.Client()
 
@@ -28,9 +29,19 @@ x_train = vectorizer.transform(x_train)
 x_test = vectorizer.transform(x_test)
 log_reg_classifier.fit(x_train, y_train)
 
-roary_chatbot = ChatBot('Roary')
+roary_chatbot = ChatBot('Roary', logic_adapters=[
+        {
+            'import_path': 'chatterbot.logic.BestMatch',
+            'default_response': 'I am sorry, but I do not understand.',
+            'maximum_similarity_threshold': 0.90
+        }
+    ]
+)
+roary_chatbot.storage.drop()
+
+
 trainer = ChatterBotCorpusTrainer(roary_chatbot)
-trainer.train("chatterbot.corpus.english")
+trainer.train("chatterbot.corpus.english.greetings", "chatterbot.corpus.english.conversations", "chatterbot.corpus.english.botprofile", "chatterbot.corpus.english.health", "chatterbot.corpus.english.computers", "chatterbot.corpus.english.emotion")
 
 keyword_dict = {"xun yu classes": "meng 420 & meng 270", "xun yu office hours": "10:00-12:00pm(mon,tues, wed & thurs)",
                 "qin liu classes": "meng 201, meng 211, meng 438/602",
@@ -99,7 +110,6 @@ def get_inspirational_quote():
     quote = json_data[0]['q'] + " -" + json_data[0]['a']
     return quote
 
-
 @client.event
 async def on_ready():
     pd.set_option('display.max_columns', None)
@@ -112,6 +122,10 @@ async def on_message(message):
     if message.author == client.user:
         return
     message_text = message.content.lower()
+
+    # exampleEmbed = discord.Embed(title=message_text, description="", url="https://drive.google.com/file/d/1fK7ud-YiWCbVsr9_h0yjyMGEm5kyq3YM/view")
+    # await message.channel.send(embed=exampleEmbed)
+
     if message_text in keyword_dict.keys():
         await message.channel.send(keyword_dict[message_text])
 
@@ -127,14 +141,22 @@ async def on_message(message):
         dense_list = dense.tolist()
         word_df = pd.DataFrame(dense_list, columns=word_names)
         print(word_df)
-
+        overall_sentiment_analyzer = SentimentIntensityAnalyzer()
+        sentiment_dict = overall_sentiment_analyzer.polarity_scores(message_text)
+        overall_sentiment = ''
+        if sentiment_dict['compound'] >= 0.05:
+            overall_sentiment = "Positive"
+        elif sentiment_dict['compound'] <= - 0.05:
+            overall_sentiment = "Negative"
+        else:
+            overall_sentiment = "Neutral"
         response = roary_chatbot.get_response(message_text)
-        await message.channel.send(response)
-
+        await message.channel.send("Sentiment detected: " + overall_sentiment + "\n" + str(response))
         message_text_to_array = [message_text]
         x_new_sample = vectorizer.transform(message_text_to_array)
         result = log_reg_classifier.predict(x_new_sample)[0]
         sentiment_detected = "positive" if result == 1 else "negative"
         print("Sentiment detected: ", sentiment_detected)
+
 
 client.run(TOKEN)
